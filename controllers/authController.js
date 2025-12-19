@@ -1,39 +1,47 @@
+// controllers/authController.js
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretspendsensekey';
+const normalizeEmail = (email) => email.toLowerCase().trim();
 
-const createToken = (user) => {
-  return jwt.sign(
-    { id: user._id, email: user.email },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
-exports.signup = async (req, res) => {
+// REGISTER
+const registerUser = async (req, res) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    let { name, email, password } = req.body;
 
-    if (!name || !email || !password || !confirmPassword) {
-      return res.status(400).json({ message: 'All fields are required' });
+    console.log('Register body:', req.body);
+
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: 'Name, email and password are required' });
     }
 
-    if (password !== confirmPassword) {
-      return res.status(400).json({ message: 'Passwords do not match' });
-    }
+    email = normalizeEmail(email);
+    password = password.trim();
 
     const existing = await User.findOne({ email });
     if (existing) {
-      return res.status(400).json({ message: 'Email already in use' });
+      return res.status(400).json({ message: 'User already exists' });
     }
 
-    const user = await User.create({ name, email, password });
-    const token = createToken(user);
+    // ⚠️ Do NOT hash here. Let User.js pre('save') do it.
+    const user = new User({
+      name: name.trim(),
+      email,
+      password, // plain for now – will be hashed in the model hook
+    });
 
-    res.status(201).json({
-      message: 'User created successfully',
-      token,
+    await user.save();
+
+    return res.status(201).json({
+      message: 'User registered successfully',
+      token: generateToken(user._id),
       user: {
         id: user._id,
         name: user.name,
@@ -41,34 +49,44 @@ exports.signup = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Signup error:', err.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Register error:', err);
+    return res.status(500).json({ message: 'Server error' });
   }
 };
 
-exports.login = async (req, res) => {
+// LOGIN
+const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+
+    console.log('Login body:', req.body);
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password required' });
+      return res
+        .status(400)
+        .json({ message: 'Email and password are required' });
     }
+
+    email = normalizeEmail(email);
+    password = password.trim();
 
     const user = await User.findOne({ email });
+
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      console.log('Login: user not found for email', email);
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
+    console.log('Login bcrypt result for', email, '=', isMatch);
+
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const token = createToken(user);
-
-    res.json({
+    return res.json({
       message: 'Login successful',
-      token,
+      token: generateToken(user._id),
       user: {
         id: user._id,
         name: user.name,
@@ -76,7 +94,66 @@ exports.login = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Login error:', err.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Login error:', err);
+    return res.status(500).json({ message: 'Server error' });
   }
+};
+
+// PROFILE
+const getProfile = async (req, res) => {
+  try {
+    return res.json({
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+    });
+  } catch (err) {
+    console.error('Get profile error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// RESET PASSWORD
+const resetPassword = async (req, res) => {
+  try {
+    let { email, newPassword } = req.body;
+
+    console.log('Reset body:', req.body);
+
+    if (!email || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: 'Email and new password are required' });
+    }
+
+    email = normalizeEmail(email);
+    newPassword = newPassword.trim();
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      console.log('Reset: user not found for email', email);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // ⚠️ Again, do NOT hash here. Just assign:
+    user.password = newPassword;
+    await user.save(); // User.js pre('save') will hash it
+
+    // sanity check
+    const ok = await bcrypt.compare(newPassword, user.password);
+    console.log('Reset: bcrypt check after save for', email, '=', ok);
+
+    return res.json({ message: 'Password reset successful' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  getProfile,
+  resetPassword,
 };

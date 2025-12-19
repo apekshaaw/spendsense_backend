@@ -1,11 +1,10 @@
 // middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
-const User = require('../spendsense_backend/models/User');
+const User = require('../models/User');
 
-exports.protect = async (req, res, next) => {
+const protect = async (req, res, next) => {
   let token;
 
-  // Expect header: Authorization: Bearer <token>
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer ')
@@ -19,10 +18,18 @@ exports.protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = { id: decoded.id };
+
+    req.user = await User.findById(decoded.id).select('-password');
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
     next();
   } catch (err) {
-    console.error('Auth middleware error:', err);
-    res.status(401).json({ message: 'Not authorized, token failed' });
+    console.error('Auth error:', err.message);
+    return res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
+
+module.exports = { protect };
