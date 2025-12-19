@@ -1,0 +1,46 @@
+// server.js
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const connectDB = require('./config/db');
+
+// routes
+const authRoutes = require('./routes/authRoutes');
+const wantRoutes = require('./routes/wantRoutes');
+const needRoutes = require('./routes/needRoutes');
+const goalRoutes = require('./routes/goalRoutes');
+
+dotenv.config();
+
+const app = express();
+
+// Middlewares
+app.use(cors());
+app.use(express.json());
+
+// Test route
+app.get('/', (req, res) => {
+  res.json({ message: 'SpendSense API is running' });
+});
+
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/wants', wantRoutes);
+app.use('/api/needs', needRoutes);
+app.use('/api/goals', goalRoutes);
+
+// Port
+const PORT = process.env.PORT || 5000;
+
+// Connect DB, then start server
+connectDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Server failed to start:', err.message);
+  });
+
+module.exports = app;
