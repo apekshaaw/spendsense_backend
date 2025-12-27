@@ -1,30 +1,56 @@
+// models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     email: {
       type: String,
       required: true,
       unique: true,
-      lowercase: true,
       trim: true,
+      lowercase: true,
     },
-    password: { type: String, required: true },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6,
+    },
+
+    // NEW FIELDS FOR PROFILE
+    phone: {
+      type: String,
+      default: '',
+    },
+    avatarUrl: {
+      type: String,
+      default: '',
+    },
+    darkMode: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
 
+// keep your existing pre('save') hashing etc.
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
-    return next();
-  }
+  if (!this.isModified('password')) return next();
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-const User = mongoose.model('User', userSchema);
-module.exports = User;
+// method to check password (you probably already have this)
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
+};
+
+module.exports = mongoose.model('User', userSchema);

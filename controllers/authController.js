@@ -1,159 +1,159 @@
 // controllers/authController.js
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
 
-const normalizeEmail = (email) => email.toLowerCase().trim();
+// Use bcryptjs if available (easier on Mac), otherwise bcrypt
+let bcrypt;
+try {
+  bcrypt = require("bcryptjs");
+} catch (e) {
+  bcrypt = require("bcrypt");
+}
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const signToken = (userId) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "30d",
+  });
 };
 
-// REGISTER
-const registerUser = async (req, res) => {
+// POST /api/auth/signup
+exports.registerUser = async (req, res) => {
   try {
-    let { name, email, password } = req.body;
-
-    console.log('Register body:', req.body);
+    const { name, email, password, phone } = req.body;
 
     if (!name || !email || !password) {
       return res
         .status(400)
-        .json({ message: 'Name, email and password are required' });
+        .json({ message: "Name, email and password are required" });
     }
-
-    email = normalizeEmail(email);
-    password = password.trim();
 
     const existing = await User.findOne({ email });
     if (existing) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(409).json({ message: "Email already exists" });
     }
 
-    // ⚠️ Do NOT hash here. Let User.js pre('save') do it.
-    const user = new User({
-      name: name.trim(),
+    const hashed = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
       email,
-      password, // plain for now – will be hashed in the model hook
+      phone: phone || "",
+      password: hashed,
     });
 
-    await user.save();
+    const token = signToken(user._id);
 
-    return res.status(201).json({
-      message: 'User registered successfully',
-      token: generateToken(user._id),
+    res.status(201).json({
+      token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone || "",
       },
     });
   } catch (err) {
-    console.error('Register error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("registerUser error:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// LOGIN
-const loginUser = async (req, res) => {
+// POST /api/auth/login
+exports.loginUser = async (req, res) => {
   try {
-    let { email, password } = req.body;
-
-    console.log('Login body:', req.body);
+    const { email, password } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Email and password are required' });
+      return res.status(400).json({ message: "Email and password are required" });
     }
-
-    email = normalizeEmail(email);
-    password = password.trim();
 
     const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    if (!user) {
-      console.log('Login: user not found for email', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    console.log('Login bcrypt result for', email, '=', isMatch);
+    const token = signToken(user._id);
 
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
-
-    return res.json({
-      message: 'Login successful',
-      token: generateToken(user._id),
+    res.json({
+      token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone || "",
       },
     });
   } catch (err) {
-    console.error('Login error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("loginUser error:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// PROFILE
-const getProfile = async (req, res) => {
+// POST /api/auth/reset-password
+// (Simple version) body: { email, newPassword }
+exports.resetPassword = async (req, res) => {
   try {
-    return res.json({
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-    });
-  } catch (err) {
-    console.error('Get profile error:', err);
-    return res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// RESET PASSWORD
-const resetPassword = async (req, res) => {
-  try {
-    let { email, newPassword } = req.body;
-
-    console.log('Reset body:', req.body);
+    const { email, newPassword } = req.body;
 
     if (!email || !newPassword) {
       return res
         .status(400)
-        .json({ message: 'Email and new password are required' });
+        .json({ message: "Email and newPassword are required" });
     }
-
-    email = normalizeEmail(email);
-    newPassword = newPassword.trim();
 
     const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (!user) {
-      console.log('Reset: user not found for email', email);
-      return res.status(404).json({ message: 'User not found' });
-    }
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
 
-    // ⚠️ Again, do NOT hash here. Just assign:
-    user.password = newPassword;
-    await user.save(); // User.js pre('save') will hash it
-
-    // sanity check
-    const ok = await bcrypt.compare(newPassword, user.password);
-    console.log('Reset: bcrypt check after save for', email, '=', ok);
-
-    return res.json({ message: 'Password reset successful' });
+    res.json({ message: "Password updated successfully" });
   } catch (err) {
-    console.error('Reset password error:', err);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("resetPassword error:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-module.exports = {
-  registerUser,
-  loginUser,
-  getProfile,
-  resetPassword,
+// GET /api/auth/me  (protected)
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error("getProfile error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// PUT /api/auth/me  (protected)
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, email, phone, avatarUrl, darkMode } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (email !== undefined) updates.email = email;
+    if (phone !== undefined) updates.phone = phone;
+    if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+    if (darkMode !== undefined) updates.darkMode = darkMode;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error("updateProfile error:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
 };

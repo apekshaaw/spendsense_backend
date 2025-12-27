@@ -1,26 +1,37 @@
 // routes/authRoutes.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
-const {
-  registerUser,
-  loginUser,
-  getProfile,
-  resetPassword,
-} = require('../controllers/authController');
+const authControllerRaw = require("../controllers/authController");
+// supports both CommonJS exports and ESModule default exports
+const authController = authControllerRaw.default || authControllerRaw;
 
-const { protect } = require('../middleware/authMiddleware');
+const { protect } = require("../middleware/authMiddleware");
 
-// @route   POST /api/auth/register
-router.post('/register', registerUser);
+const pickFn = (names, label) => {
+  for (const name of names) {
+    if (typeof authController?.[name] === "function") return authController[name];
+  }
+  throw new Error(
+    `authRoutes.js: Missing controller function for "${label}". ` +
+      `Expected one of: ${names.join(", ")}. ` +
+      `Check exports in controllers/authController.js`
+  );
+};
 
-// @route   POST /api/auth/login
-router.post('/login', loginUser);
+// Map to whatever names exist in your authController.js
+const registerUser = pickFn(["registerUser", "signup", "register", "createUser"], "signup");
+const loginUser = pickFn(["loginUser", "login", "signin"], "login");
+const resetPassword = pickFn(["resetPassword", "forgotPassword", "requestPasswordReset"], "reset-password");
+const getProfile = pickFn(["getProfile", "profile", "getMe", "me"], "get /me");
+const updateProfile = pickFn(["updateProfile", "updateMe", "updateUser", "editProfile"], "put /me");
 
-// @route   GET /api/auth/me
-router.get('/me', protect, getProfile);
+// Routes
+router.post("/signup", registerUser);
+router.post("/login", loginUser);
+router.post("/reset-password", resetPassword);
 
-// @route   POST /api/auth/reset-password
-router.post('/reset-password', resetPassword);
+router.get("/me", protect, getProfile);
+router.put("/me", protect, updateProfile);
 
 module.exports = router;
