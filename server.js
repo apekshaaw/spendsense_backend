@@ -13,12 +13,13 @@ const goalRoutes = require("./routes/goalRoutes");
 dotenv.config();
 console.log("ENV PORT:", process.env.PORT);
 
-
 const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+
+// ✅ IMPORTANT: allow base64 avatar in JSON
+app.use(express.json({ limit: "10mb" }));
 
 // Test route
 app.get("/", (req, res) => {
@@ -34,7 +35,6 @@ app.use("/api/goals", goalRoutes);
 // Port
 const PORT = Number(process.env.PORT) || 5001;
 console.log("USING PORT:", PORT);
-
 
 // Start server (connect DB first)
 const startServer = async () => {
