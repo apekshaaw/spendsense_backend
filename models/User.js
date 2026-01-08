@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
     email: {
       type: String,
       required: true,
@@ -16,21 +17,25 @@ const userSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+
     password: {
       type: String,
       required: true,
       minlength: 6,
     },
 
-    // NEW FIELDS FOR PROFILE
+    // PROFILE FIELDS
     phone: {
       type: String,
       default: '',
     },
+
+    // Store base64 string OR URL (your choice)
     avatarUrl: {
       type: String,
       default: '',
     },
+
     darkMode: {
       type: Boolean,
       default: false,
@@ -39,7 +44,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// keep your existing pre('save') hashing etc.
+// Hash password only when it's new/changed
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
 
@@ -48,7 +53,7 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// method to check password (you probably already have this)
+// Compare password
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
