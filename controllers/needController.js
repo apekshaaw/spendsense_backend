@@ -6,9 +6,7 @@ exports.createNeed = async (req, res) => {
     const { name, price, notes } = req.body;
 
     if (!name || price == null) {
-      return res
-        .status(400)
-        .json({ message: 'Name and price are required.' });
+      return res.status(400).json({ message: 'Name and price are required.' });
     }
 
     const need = await Need.create({
@@ -27,9 +25,7 @@ exports.createNeed = async (req, res) => {
 
 exports.getNeeds = async (req, res) => {
   try {
-    const needs = await Need.find({ user: req.user._id }).sort({
-      createdAt: -1,
-    });
+    const needs = await Need.find({ user: req.user._id }).sort({ createdAt: -1 });
     res.json(needs);
   } catch (err) {
     console.error('Get needs error:', err);
@@ -37,14 +33,39 @@ exports.getNeeds = async (req, res) => {
   }
 };
 
+// ✅ NEW: PATCH /api/needs/:id  -> edit name/price/notes
+exports.updateNeed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, price, notes } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (price !== undefined) updates.price = price;
+    if (notes !== undefined) updates.notes = notes;
+
+    const updated = await Need.findOneAndUpdate(
+      { _id: id, user: req.user._id },
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Need not found.' });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error('Update need error:', err);
+    res.status(500).json({ message: 'Failed to update need.' });
+  }
+};
+
 exports.deleteNeed = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const need = await Need.findOneAndDelete({
-      _id: id,
-      user: req.user._id,
-    });
+    const need = await Need.findOneAndDelete({ _id: id, user: req.user._id });
 
     if (!need) {
       return res.status(404).json({ message: 'Need not found.' });
