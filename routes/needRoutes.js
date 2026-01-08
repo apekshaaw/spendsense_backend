@@ -1,19 +1,18 @@
 // routes/needRoutes.js
 const express = require('express');
-const {
-  createNeed,
-  getNeeds,
-  deleteNeed,
-} = require('../controllers/needController');
+const { createNeed, getNeeds, deleteNeed, updateNeed } = require('../controllers/needController');
 const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// all need routes require login
 router.use(protect);
 
-router.post('/', createNeed);    // POST /api/needs
-router.get('/', getNeeds);       // GET  /api/needs
-router.delete('/:id', deleteNeed); // DELETE /api/needs/:id
+router.post('/', createNeed);
+router.get('/', getNeeds);
+
+// ✅ NEW
+router.patch('/:id', updateNeed);
+
+router.delete('/:id', deleteNeed);
 
 module.exports = router;
