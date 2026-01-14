@@ -1,28 +1,23 @@
 // routes/goalRoutes.js
-const express = require('express');
+const express = require("express");
 const {
   createOrUpdateGoal,
   getMyGoal,
   updateGoalProgress,
   editMyGoal,
-} = require('../controllers/goalController');
-const { protect } = require('../middleware/authMiddleware');
+  getMyGoalHistory,
+} = require("../controllers/goalController");
+const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// all goal routes require login
 router.use(protect);
 
-// Create or replace main goal
-router.post('/', createOrUpdateGoal);
+router.post("/", createOrUpdateGoal);
+router.get("/me", getMyGoal);
+router.patch("/me", editMyGoal);
+router.patch("/me/progress", updateGoalProgress);
 
-// Get active goal
-router.get('/me', getMyGoal);
-
-// Edit goal details (name, target, notes)
-router.patch('/me', editMyGoal);
-
-// Update progress (+ / - amount, add to history)
-router.patch('/me/progress', updateGoalProgress);
+router.get("/history", getMyGoalHistory);
 
 module.exports = router;
